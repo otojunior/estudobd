@@ -1,4 +1,14 @@
-﻿drop table if exists departamento cascade;
+﻿/*
+	Populate :: Exemplo 01
+	Autor:
+		Oto Soares Coelho Junior
+		(otojunior@gmail.com)
+		17/01/2017
+	Entidades:
+		[departamento]---*[empregado]
+*/
+
+drop table if exists departamento cascade;
 
 create table departamento (
 	id INTEGER primary key,
