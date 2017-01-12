@@ -17,6 +17,20 @@ $$ language plpgsql;
 
 -- --------------------------------------------------------------
 
+create or replace function random_string(minlength integer, maxlength INTEGER, words INTEGER) 
+returns text as $$
+	declare
+		result text := '';
+	begin
+		for i in 1..words loop
+			result := result || random_string(random_int_range(minlength, maxlength)) || ' ';  
+		end loop;
+		return TRIM(result);
+	end;
+$$ language plpgsql;
+
+-- --------------------------------------------------------------
+
 create or replace function random_date(begining varchar(20), ending varchar(20))
 returns timestamp as $$
 	select cast(begining as timestamp) + random() * 
