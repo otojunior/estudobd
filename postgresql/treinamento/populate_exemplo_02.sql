@@ -13,8 +13,8 @@ drop table if exists cliente cascade;
 
 create table cliente (
 	id INTEGER primary key,
-	nome VARCHAR(60),
-	nasc timestamp
+	nome VARCHAR(60) NOT NULL,
+	nasc timestamp NOT NULL
 	/* idade pode ser campo calulado via function */
 );
 
@@ -32,7 +32,7 @@ drop table if exists categoria cascade;
 
 create table categoria (
 	id INTEGER primary key,
-	nome VARCHAR(20),
+	nome VARCHAR(20) NOT NULL,
 	descricao VARCHAR(100)
 );
 
@@ -50,8 +50,8 @@ drop table if exists pedido cascade;
 
 create table pedido (
 	id INTEGER primary key,
-	dt_pedido TIMESTAMP,
-	cliente_id INTEGER,
+	dt_pedido TIMESTAMP NOT NULL,
+	cliente_id INTEGER NOT NULL,
 	FOREIGN KEY (cliente_id) references cliente (id)
 );
 
@@ -69,9 +69,9 @@ drop table if exists item cascade;
 
 create table item (
 	id INTEGER primary key,
-	nome VARCHAR(20),
+	nome VARCHAR(20) NOT NULL,
 	descricao VARCHAR(100),
-	preco NUMERIC(5,2),
+	preco NUMERIC(5,2) NOT NULL,
 	cat_id INTEGER,
 	FOREIGN KEY (cat_id) references categoria (id)
 );
@@ -91,8 +91,8 @@ from generate_series(1, 1e5);
 drop table if exists pedido_item cascade;
 
 create table pedido_item (
-	pedido_id INTEGER,
-	item_id INTEGER,
+	pedido_id INTEGER NOT NULL,
+	item_id INTEGER NOT NULL,
 	PRIMARY KEY (pedido_id, item_id),
 	FOREIGN KEY (pedido_id) references pedido (id),
 	FOREIGN KEY (item_id) references item (id)
