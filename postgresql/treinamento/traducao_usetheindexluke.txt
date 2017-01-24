@@ -494,110 +494,249 @@ RETURN NUMBER AS
 		RETURN TRUNC(MONTHS_BETWEEN(SYSDATE, date_of_birth)/12); 
 	END 
 
-A função GET_AGE usa a data atual (SYSDATE) para calcular a idade com base na data de nascimento fornecida. Você pode usar esta função em todas as partes de uma consulta SQL, por exemplo, em um select e em cláusulas where : 
+A função GET_AGE usa a data atual (SYSDATE) para calcular a idade com base na data de nascimento fornecida. Você pode usar esta função em todas as partes de uma consulta SQL, por exemplo, em um select e em cláusulas where: 
 
 SELECT first_name, last_name, get_age(date_of_birth) 
 FROM employees 
 WHERE get_age(date_of_birth) = 42
 
+A consulta lista todos os funcionários com 42 anos de idade. Usar um índice baseado em função é uma idéia óbvia para otimizar essa consulta, mas você não pode usar a função GET_AGE em uma definição de índice porque ela não é determinística. Isso significa que o resultado da chamada de função não é totalmente determinado por seus parâmetros. Somente as funções que sempre retornam o mesmo resultado para os mesmos parâmetros (funções que são determinísticas) podem ser indexadas.
 
-A consulta lista todos os funcionários de 42 anos. Usar um índice baseado em função é uma idéia óbvia para otimizar essa consulta, mas você não pode usar a função GET_AGE em uma definição de índice porque não é determinística . Isso significa que o resultado da chamada de função não é totalmente determinado por seus parâmetros. Somente as funções que sempre retornam o mesmo resultado para os mesmos parâmetros - funções que são determinísticas - podem ser indexadas. 
-A razão por trás dessa limitação é simples. Ao inserir uma nova linha, o banco de dados chama a função e armazena o resultado no índice e ali permanece inalterado. Não há nenhum processo periódico que atualiza o índice. O banco de dados atualiza a idade indexada apenas quando a data de nascimento é alterada por uma instrução de atualização. Após o próximo aniversário, a idade armazenada no índice será errada. 
-Além de ser determinista, o PostgreSQL e o banco de dados Oracle exigem que as funções sejam declaradas determinísticas quando usadas em um índice, portanto você precisa usar a palavra-chave DETERMINISTIC (Oracle) ou IMMUTABLE (PostgreSQL). 
-Cuidado 
-O PostgreSQL eo banco de dados Oracle confiam nas DETERMINISTIC ou IMMUTABLE - isso significa que confiam no desenvolvedor. 
-Você pode declarar a função GET_AGE como sendo determinística e usá-la em uma definição de índice. Independentemente da declaração, não funcionará como pretendido porque a idade armazenada no índice não aumentará com o passar dos anos; Os empregados não ficarão mais velhos - pelo menos não no índice. 
-Outros exemplos de funções que não podem ser "indexadas" são geradores de números aleatórios e funções que dependem de variáveis ​​de ambiente. 
-Nota 
-O DB2 não pode usar funções definidas pelo usuário em índices (nem mesmo se elas são determinísticas). 
-Dica 
+A razão por trás dessa limitação é simples. Ao inserir uma nova linha, o banco de dados chama a função e armazena o resultado no índice e ali permanece inalterado. Não há nenhum processo periódico que atualiza o índice. O banco de dados atualiza a idade indexada apenas quando a data de nascimento é alterada por uma instrução de update. Após o próximo aniversário, a idade armazenada no índice estará errada.
+
+Além de serem determinísticas, o PostgreSQL e o banco de dados Oracle exigem que as funções sejam declaradas determinísticas quando usadas em um índice. Para isto, você precisa usar a palavra-chave DETERMINISTIC (Oracle) ou IMMUTABLE (PostgreSQL) na criação da função.
+ 
+Cuidado:
+
+O PostgreSQL e o Oracle confiam nas declarações DETERMINISTIC ou IMMUTABLE. Isso significa que confiam no desenvolvedor.
+
+Você pode declarar a função GET_AGE como sendo determinística e usá-la em uma definição de índice. Independentemente da declaração, não funcionará como pretendido porque a idade armazenada no índice não aumentará com o passar dos anos. Os empregados não ficarão mais velhos (pelo menos não no índice).
+
+Outros exemplos de funções que não podem ser "indexadas" são geradores de números aleatórios e funções que dependem de variáveis ​​de ambiente.
+
+Nota:
+
+O DB2 não pode usar funções definidas pelo usuário em índices (nem mesmo se elas forem determinísticas). 
+
+Dica:
+
 Como você ainda pode usar um índice para otimizar uma consulta para todos os funcionários de 42 anos? 
+
 Sobre-Indexação 
+---------------
 
+Se o conceito de indexação baseada em função é novo para você, você pode ser tentado a indexar tudo, mas esta é na verdade a última coisa que você deve fazer. A razão é que cada índice necessita de  manutenção contínua. Os índices baseados em função são particularmente problemáticos porque aumentam muito a chance de se criar índices redundantes.
+ 
+A pesquisa case-insensitive acima pode ser implementada com a função LOWER também:
 
-Se o conceito de indexação baseada em função é novo para você, você pode ser tentado a indexar tudo, mas esta é na verdade a última coisa que você deve fazer. A razão é que cada índice causa manutenção contínua. Os índices baseados em função são particularmente problemáticos porque facilitam muito a criação de índices redundantes . 
-A pesquisa case-insensitive acima pode ser implementada com a função LOWER também: 
- SELECT first_name, last_name, phone_number FROM employees WHERE LOWER(last_name) = LOWER('winand') 
-Um único índice não pode suportar ambos os métodos de ignorar o caso. LOWER(last_name) , é claro, criar um segundo índice em LOWER(last_name) para esta consulta, mas isso LOWER(last_name) que o banco de dados deve manter dois índices para cada instrução insert , update e delete (veja também o Capítulo 8, " Modificando Dados " ). . Para fazer com que um índice seja suficiente, você deve usar consistentemente a mesma função em toda a sua aplicação. 
-Dica 
-Unificar o caminho de acesso para que um índice possa ser usado por várias consultas. 
-Atenção 
+SELECT first_name, last_name, phone_number 
+FROM employees 
+WHERE LOWER(last_name) = LOWER('winand') 
+
+Um único índice não pode suportar ambos os métodos de ignorar o case. Nós poderíamos, é claro, criar um segundo índice em LOWER(last_name) para esta consulta, mas isso significaria que o banco de dados deveria manter dois índices para cada instrução insert, update e delete (veja também o Capítulo 8, "Modificando Dados"). Para fazer com que um índice seja suficiente, você deve usar consistentemente a mesma função em toda a sua aplicação. 
+
+Dica:
+
+Unificar as consultas para que um índice possa ser usado por várias consultas. 
+
+Atenção:
+
 Às vezes, as ferramentas ORM usam UPPER e LOWER sem o conhecimento do desenvolvedor. O Hibernate, por exemplo, injeta um LOWER implícito para pesquisas que não diferenciam maiúsculas de minúsculas. 
-Dica 
-Procure sempre indexar os dados originais, pois isso é muitas vezes a informação mais útil que você pode colocar em um índice. 
+
+Dica:
+
+Procure sempre indexar os dados originais, pois isso é a informação mais útil que você pode colocar em um índice.
+
 Consultas parametrizadas 
+------------------------
 
+Esta seção aborda um tópico ignorado na maioria dos livros SQL: consultas parametrizadas e parâmetros de vinculação.
 
-Esta seção aborda um tópico ignorado na maioria dos livros de texto SQL: consultas parametrizadas e parâmetros de vinculação. 
-Os parâmetros de ligação - também chamados parâmetros dinâmicos ou variáveis ​​de ligação - são uma maneira alternativa de passar dados para o banco de dados. Em vez de colocar os valores diretamente na instrução SQL, basta usar um espaço reservado como ? , :name ou @name e forneça os valores reais usando uma chamada API separada. 
-Não há nada de ruim em escrever valores diretamente em declarações ad-hoc; Há, no entanto, duas boas razões para usar parâmetros de ligação em programas: 
-Segurança 
-Vincular variáveis ​​são a melhor maneira de evitar a injeção SQL . 
-atuação 
-Bancos de dados com um cache de plano de execução como o SQL Server eo banco de dados Oracle podem reutilizar um plano de execução ao executar a mesma instrução várias vezes. Ele economiza esforço na reconstrução do plano de execução, mas funciona apenas se a instrução SQL for exatamente a mesma. Se você colocar valores diferentes na instrução SQL, o banco de dados manipula-lo como uma instrução diferente e recria o plano de execução. 
-Ao usar parâmetros de ligação você não escreve os valores reais, mas sim inserir espaços reservados na instrução SQL. Dessa forma, as declarações não mudam ao executá-las com valores diferentes. 
-Naturalmente, há exceções, por exemplo, se o volume de dados afetados depende dos valores reais: 
- SELECT first_name, last_name FROM employees WHERE subsidiary_id = 20 
- --------------------------------------------------------------- |Id | Operation | Name | Rows | Cost | --------------------------------------------------------------- | 0 | SELECT STATEMENT | | 99 | 70 | | 1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 99 | 70 | |*2 | INDEX RANGE SCAN | EMPLOYEE_PK | 99 | 2 | --------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 2 - access("SUBSIDIARY_ID"=20) 
-Uma pesquisa de índice oferece o melhor desempenho para pequenas subsidiárias, mas um TABLE ACCESS FULL pode superar o índice para grandes subsidiárias: 
- SELECT first_name, last_name FROM employees WHERE subsidiary_id = 30 
- ---------------------------------------------------- | Id | Operation | Name | Rows | Cost | ---------------------------------------------------- | 0 | SELECT STATEMENT | | 1000 | 478 | |* 1 | TABLE ACCESS FULL | EMPLOYEES | 1000 | 478 | ---------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter("SUBSIDIARY_ID"=30) 
-Nesse caso, o histograma em SUBSIDIARY_ID cumpre sua SUBSIDIARY_ID . O otimizador utiliza para determinar a frequência da ID subsidiária mencionado na consulta SQL. Consequentemente, obtém duas estimativas de contagem de linhas diferentes para ambas as consultas. 
-O cálculo de custo subsequente resultará, portanto, em dois valores de custo diferentes. Quando o otimizador finalmente seleciona um plano de execução que leva o plano com o valor de custo mais baixo. Para a subsidiária menor, é a que usa o índice. 
-O custo da operação de TABLE ACCESS BY INDEX ROWID é altamente sensível à estimativa de contagem de linhas. Selecionar dez vezes mais linhas irá elevar o valor de custo por esse fator. O custo total usando o índice é então ainda maior do que uma varredura de tabela completa. O otimizador, portanto, selecionará o outro plano de execução para a subsidiária maior. 
+Os parâmetros de vinculação: (também chamados parâmetros dinâmicos ou variáveis ​​de ligação) são uma maneira alternativa de passar dados para o banco de dados. Em vez de colocar os valores diretamente na instrução SQL, basta usar um espaço reservado como "?", ":nome" ou "@name" e forneça os valores reais usando uma chamada separada à API.
+
+Não há nada de ruim em escrever valores diretamente em declarações ad-hoc. Há, no entanto, duas boas razões para usar parâmetros de ligação em programas: 
+
+Segurança:
+
+Vincular variáveis ​​são a melhor maneira de evitar ataques "SQL Injection".
+
+Desempenho:
+
+Bancos de dados com um cache de plano de execução podem reutilizar um plano de execução ao executar a mesma instrução várias vezes. Ele economiza esforço na reconstrução do plano de execução, mas funciona apenas se a instrução SQL for exatamente a mesma. Se você colocar valores diferentes na instrução SQL, o banco de dados tratará como sendo uma instrução diferente e recriará o plano de execução.
+
+Ao usar parâmetros de ligação você não escreve os valores reais, mas sim variáveis na instrução SQL. Dessa forma, as consultas não mudarão ao executá-las com valores diferentes.
+
+Naturalmente, há exceções, por exemplo, se o volume de dados afetados depende dos valores reais:
+
+SELECT first_name, last_name 
+FROM employees 
+WHERE subsidiary_id = 20 
+
+---------------------------------------------------------------
+|Id | Operation                   | Name        | Rows | Cost |
+---------------------------------------------------------------
+| 0 | SELECT STATEMENT            |             |   99 |   70 |
+| 1 |  TABLE ACCESS BY INDEX ROWID| EMPLOYEES   |   99 |   70 |
+|*2 |   INDEX RANGE SCAN          | EMPLOYEE_PK |   99 |    2 |
+---------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("SUBSIDIARY_ID"=20) 
+
+Uma pesquisa em índice oferece o melhor desempenho para pequenas subsidiárias, mas um TABLE ACCESS FULL pode superar o índice para grandes subsidiárias:
+
+SELECT first_name, last_name 
+FROM employees 
+WHERE subsidiary_id = 30
+
+----------------------------------------------------
+| Id | Operation         | Name      | Rows | Cost |
+----------------------------------------------------
+|  0 | SELECT STATEMENT  |           | 1000 |  478 |
+|* 1 |  TABLE ACCESS FULL| EMPLOYEES | 1000 |  478 |
+----------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter("SUBSIDIARY_ID"=30)
+ 
+Nesse caso, o histograma em SUBSIDIARY_ID cumpre seu propósito. O otimizador utiliza para determinar a frequência da ID subsidiária mencionado na consulta SQL. Consequentemente, obtém duas estimativas de contagem de linhas diferentes para ambas as consultas.
+
+O cálculo de custo subsequente resultará, portanto, em dois valores de custo diferentes. Quando o otimizador finalmente selecionar um plano de execução, ele escolherá o plano com o valor de custo mais baixo. Para a subsidiária menor, é a que usará o índice. 
+
+O custo da operação de TABLE ACCESS BY INDEX ROWID é altamente sensível à estimativa de contagem de linhas. Selecionar dez vezes mais linhas irá elevar o valor de custo por esse fator. O custo total usando o índice é então ainda maior do que uma varredura de tabela completa. O otimizador, portanto, selecionará o outro plano de execução para a subsidiária maior.
+ 
 Ao usar parâmetros de ligação, o otimizador não possui valores concretos disponíveis para determinar sua freqüência. Em seguida, assume apenas uma distribuição igual e sempre obtém as mesmas estimativas de contagem de linhas e valores de custo. No final, ele sempre selecionará o mesmo plano de execução. 
-Dica 
+
+Dica:
+ 
 Os histogramas de coluna são mais úteis se os valores não forem uniformemente distribuídos. 
-Para colunas com distribuição uniforme, é muitas vezes suficiente para dividir o número de valores distintos pelo número de linhas na tabela. Este método também funciona quando se utilizam parâmetros de ligação. 
-Se compararmos o otimizador a um compilador, variáveis ​​de vinculação são como variáveis ​​de programa, mas se você escrever os valores diretamente na instrução eles são mais como constantes. O banco de dados pode usar os valores da instrução SQL durante a otimização, assim como um compilador pode avaliar expressões constantes durante a compilação. Os parâmetros de ligação são, simplesmente, não visíveis para o otimizador, assim como os valores de tempo de execução de variáveis ​​não são conhecidos pelo compilador. 
+
+Para colunas com distribuição uniforme, é suficiente dividir o número de valores distintos pelo número de linhas na tabela. Este método também funciona quando se utilizam parâmetros de ligação.
+ 
+Se compararmos o otimizador a um compilador, variáveis ​​de vinculação são como variáveis ​​de programa, mas se você escrever os valores diretamente na instrução eles se parecem mais como constantes. O banco de dados pode usar os valores da instrução SQL durante a otimização, assim como um compilador pode avaliar expressões constantes durante a compilação. Os parâmetros de ligação são, simplesmente, não visíveis para o otimizador, assim como os valores de variáveis ​​não são conhecidos em runtime pelo compilador. 
+
 Desta perspectiva, é um pouco paradoxal que os parâmetros de ligação possam melhorar o desempenho se não usar parâmetros de ligação permite que o otimizador opte sempre pelo melhor plano de execução. Mas a questão é a que preço? Gerar e avaliar todas as variantes do plano de execução é um enorme esforço que não vale a pena se você obtiver o mesmo resultado no final de qualquer maneira. 
-Dica 
-Não usar parâmetros de ligação é como recompilar um programa sempre. 
-Decidir construir um plano de execução especializado ou genérico apresenta um dilema para o banco de dados. Qualquer esforço é levado para avaliar todas as possíveis variantes de plano para cada execução para obter sempre o melhor plano de execução ou a sobrecarga de otimização é salva e um plano de execução em cache é usado sempre que possível, aceitando o risco de usar um plano de execução sub-ótimo. O dilema é que o banco de dados não sabe se o ciclo completo de otimização fornece um plano de execução diferente sem realmente fazer a otimização completa. Os fornecedores de banco de dados tentam resolver esse dilema com métodos heurísticos - mas com sucesso muito limitado. 
-Como desenvolvedor, você pode usar parâmetros de ligação deliberadamente para ajudar a resolver este dilema. Ou seja, você deve sempre usar parâmetros de ligação, exceto para valores que devem influenciar o plano de execução. 
-Códigos de status distribuídos desigualmente como "todo" e "feito" são um bom exemplo. O número de entradas "concluídas" freqüentemente excede os registros de "todo" por uma ordem de magnitude. Usando um índice só faz sentido ao procurar entradas "todo" nesse caso. O particionamento é outro exemplo - isto é, se você dividir tabelas e índices em várias áreas de armazenamento. Os valores reais podem influenciar as partições que devem ser digitalizadas. O desempenho de consultas LIKE pode sofrer de parâmetros de ligação, bem como veremos na próxima seção . 
-Dica 
-Em toda a realidade, há apenas alguns casos em que os valores reais afetam o plano de execução. Você deve, portanto, usar parâmetros de ligação em caso de dúvida, apenas para evitar injeções SQL. 
-Os trechos de código a seguir mostram como usar parâmetros de ligação em várias linguagens de programação. 
-C # 
-Java 
-Sem parâmetros de ligação: 
- int subsidiary_id; Statement command = connection.createStatement( "select first_name, last_name" + " from employees" + " where subsidiary_id = " + subsidiary_id ); 
-Usando um parâmetro bind: 
- int subsidiary_id; PreparedStatement command = connection. prepareStatement ( "select first_name, last_name" + " from employees" + " where subsidiary_id = ?" ); command.setInt(1, subsidiary_id); 
-Consulte também: PreparedStatement classe PreparedStatement. 
-Perl 
-PHP 
-Rubi 
-Veja também 
-Exemplos usando Ferramentas ORM 
-O ponto de interrogação ( ? ) É o único caractere marcador de posição que o padrão SQL define. Pontos de interrogação são parâmetros posicionais. Isso significa que os pontos de interrogação são numerados da esquerda para a direita. Para vincular um valor a um ponto de interrogação específico, você deve especificar seu número. Isso pode, no entanto, ser muito impraticável porque a numeração muda ao adicionar ou remover espaços reservados. Muitos bancos de dados oferecem uma extensão proprietária para parâmetros nomeados para resolver este problema - por exemplo, usando um símbolo "at" ( @name ) ou dois-pontos ( :name ). 
-Nota 
-Os parâmetros de ligação não podem alterar a estrutura de uma instrução SQL. 
-Isso significa que você não pode usar parâmetros de ligação para nomes de tabela ou coluna. Os seguintes parâmetros de ligação não funcionam: 
- String sql = prepare("SELECT * FROM ? WHERE ?"); sql.execute('employees', 'employee_id = 1'); 
-Se você precisar alterar a estrutura de uma instrução SQL durante o tempo de execução, use o SQL dinâmico . 
+
+Dica:
+
+Não usar parâmetros de ligação é como recompilar um programa sempre.
+
+Decidir construir um plano de execução especializado ou genérico apresenta um dilema para o banco de dados. Qualquer esforço é gasto para avaliar todas as possíveis variantes de plano para cada execução para obter sempre o melhor plano de execução ou a sobrecarga de otimização é salva e um plano de execução em cache é usado sempre que possível, aceitando o risco de usar um plano de execução sub-ótimo. O dilema é que o banco de dados não sabe se o ciclo completo de otimização fornece um plano de execução diferente sem realmente fazer a otimização completa. Os fornecedores de banco de dados tentam resolver esse dilema com métodos heurísticos - mas com sucesso muito limitado.
+
+Como desenvolvedor, você pode usar parâmetros de ligação deliberadamente para ajudar a resolver este dilema. Ou seja, você deve sempre usar parâmetros de ligação, exceto para valores que devem influenciar o plano de execução.
+ 
+Códigos de status distribuídos desigualmente como "TODO" e "DONE" são um bom exemplo. O número de entradas "DONE" freqüentemente excede os registros de "TODO" por uma ordem de magnitude. Usando um índice só faz sentido ao procurar entradas "TODO" nesse caso. O particionamento é outro exemplo, isto é, se você dividir tabelas e índices em várias áreas de armazenamento. Os valores reais podem influenciar as partições que devem ser digitalizadas. O desempenho de consultas LIKE pode sofrer com parâmetros de ligação, bem como veremos na próxima seção.
+
+Dica:
+
+Na realidade, há apenas alguns casos em que os valores reais afetam o plano de execução. Você deve, portanto, usar parâmetros de ligação em caso de dúvida, apenas para evitar injeções SQL. 
+
 Procurando por intervalos 
+-------------------------
+
+Operadores de desigualdade como < , > e between podem usar índices exatamente como o operador igual explicado acima. Mesmo um filtro LIKE pode (sob certas circunstâncias) usar um índice como as condições de faixa de valores.
+ 
+O uso dessas operações limita a escolha da ordem das colunas em índices de várias colunas. Essa limitação pode até mesmo excluir todas as opções de indexação ótimas: existem consultas onde simplesmente não é possível definir uma ordem de coluna "correta". 
+
+Maior, Menor e BETWEEN
+----------------------
+
+O maior risco de desempenho de um INDEX RANGE SCAN é o percurso de nó-folha. Portanto, é a regra de ouro da indexação manter o intervalo de pesquisa de índices tão pequeno quanto possível. Você pode verificar isso perguntando a si mesmo onde uma varredura de índices começa e onde termina.
+
+A questão é fácil de responder se a instrução SQL menciona as condições de início e término explicitamente:
+
+SELECT first_name, last_name, date_of_birth 
+FROM employees 
+WHERE 
+	date_of_birth >= TO_DATE(?, 'YYYY-MM-DD') AND 
+	date_of_birth <= TO_DATE(?, 'YYYY-MM-DD')
+	
+Um índice em DATE_OF_BIRTH só é pesquisado no intervalo especificado. A pesquisa começa na primeira data e termina na segunda. Não podemos restringir o intervalo de índices pesquisados ainda mais.
+
+As condições de início e fim são menos óbvias se uma segunda coluna for envolvida:
+
+SELECT first_name, last_name, date_of_birth 
+FROM employees 
+WHERE 
+	date_of_birth >= TO_DATE(?, 'YYYY-MM-DD') AND 
+	date_of_birth <= TO_DATE(?, 'YYYY-MM-DD') AND 
+	subsidiary_id = ?
+	
+É claro que um índice ideal tem de cobrir ambas as colunas, mas a questão é em que ordem?
+
+As figuras a seguir mostram o efeito da ordem das colunas no intervalo de índices percorridos. Para esta ilustração buscamos todos os funcionários da subsidiária 27 que nasceram entre 01 de janeiro e 9 de janeiro de 1971.
+
+A Figura 2.2 visualiza um detalhe do índice em DATE_OF_BIRTH e SUBSIDIARY_ID - nessa ordem. Onde o banco de dados começará a seguir a cadeia do nó-folha, ou melhor: onde o percorrimento da árvore terminará? 
+
+[[[Figura 2.2 DATE_OF_BIRTH Escala em DATE_OF_BIRTH , SUBSIDIARY_ID Índice]]]
+
+O índice é ordenado por datas de nascimento primeiro. Somente se dois funcionários nascerem no mesmo dia o SUBSIDIARY_ID será usado para ordenar esses registros. A consulta, no entanto, abrange um intervalo de datas. A ordenação de SUBSIDIARY_ID é, portanto, inútil durante o percurso da árvore. Isso é óbvio se você perceber que não há entrada para a subsidiária 27 nos nós-ramo - embora haja um nos nós-folha. O filtro em DATE_OF_BIRTH é, portanto, a única condição que limita o intervalo de índices varridos. Ele começa na primeira entrada correspondente ao intervalo de datas e termina no último - todos os cinco nós de folha mostrados na Figura 2.2 .
+
+A imagem parece completamente diferente ao inverter a ordem das colunas. A Figura 2.3 ilustra a varredura se o índice começar com a coluna SUBSIDIARY_ID .
+
+Figura 2.3 Escala de SUBSIDIARY_ID em SUBSIDIARY_ID , DATE_OF_BIRTH Índice
+
+A diferença é que o operador equal limita a primeira coluna de índice a um único valor. Dentro do SUBSIDIARY_ID para este valor ( SUBSIDIARY_ID 27) o índice é classificado de acordo com a segunda coluna - a data de nascimento - então não há necessidade de visitar o primeiro nó de folha porque o nó de ramificação já indica que não há empregado para a subsidiária 27 Nascido após 25 de junho de 1969 no primeiro nó da folha.
+
+O percurso da árvore leva diretamente ao segundo nó da folha. Neste caso, todas as cláusulas de cláusulas where limitam o intervalo de índices varridos de modo que a varredura termine no mesmo nó de folha.
+Dica
+
+Regra geral: índice para a igualdade primeiro - então para os intervalos.
+
+A diferença de desempenho real depende dos dados e dos critérios de pesquisa. A diferença pode ser desprezível se o filtro em DATE_OF_BIRTH for muito seletivo por conta própria. Quanto maior for o intervalo de datas, maior será a diferença de desempenho.
+
+Com este exemplo, também podemos falsificar o mito de que a coluna mais seletiva deve estar na posição de índice mais à esquerda. Se olharmos para os números e considerarmos a seletividade da primeira coluna apenas, vemos que ambas as condições correspondem a 13 registros. Este é o caso, independentemente de se filtrar por DATE_OF_BIRTH apenas ou por SUBSIDIARY_ID apenas. A selectividade não é útil aqui, mas uma ordem de coluna é ainda melhor do que a outra.
+
+Para otimizar o desempenho, é muito importante conhecer o intervalo de índices varridos. Com a maioria dos bancos de dados você pode até ver isso no plano de execução - você só precisa saber o que procurar. O seguinte plano de execução do banco de dados Oracle inequivocamente indica que o índice EMP_TEST começa com a coluna DATE_OF_BIRTH .
+
+DB2
+Oráculo
+
+     -------------------------------------------------------------- |Id | Operation | Name | Rows | Cost | -------------------------------------------------------------- | 0 | SELECT STATEMENT | | 1 | 4 | |*1 | FILTER | | | | | 2 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 1 | 4 | |*3 | INDEX RANGE SCAN | EMP_TEST | 2 | 2 | -------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter(:END_DT >= :START_DT) 3 - access(DATE_OF_BIRTH >= :START_DT AND DATE_OF_BIRTH <= :END_DT) filter(SUBSIDIARY_ID = :SUBS_ID) 
+
+PostgreSQL
+servidor SQL
+
+As informações de predicado para o INDEX RANGE SCAN fornece a dica crucial. Identifica as condições da cláusula where como acesso ou como predicados de filtro . Isto é como o banco de dados nos diz como ele usa cada condição.
+Nota
+
+O plano de execução foi simplificado para maior clareza. Explica os detalhes da seção "Informações do Predicado" em um plano de execução do Oracle.
+
+As condições na coluna DATE_OF_BIRTH são as únicas listadas como predicados de acesso; Eles limitam o intervalo de índices varridos. O DATE_OF_BIRTH é, portanto, a primeira coluna no índice EMP_TEST . A coluna SUBSIDIARY_ID é usada apenas como um filtro.
+Importante
+
+Os predicados de acesso são as condições de início e parada para uma pesquisa de índice. Eles definem o intervalo de índices varridos.
+
+Os predicados do filtro de índice são aplicados somente durante o percurso do nó folha . Eles não restringem o intervalo de índices varridos.
+
+O apêndice explica como reconhecer predicados de acesso no MySQL , SQL Server e PostgreSQL .
+
+O banco de dados pode usar todas as condições como predicados de acesso se girarmos a definição de índice em torno de:
+
+DB2
+Oráculo
+
+     --------------------------------------------------------------- | Id | Operation | Name | Rows | Cost | --------------------------------------------------------------- | 0 | SELECT STATEMENT | | 1 | 3 | |* 1 | FILTER | | | | | 2 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 1 | 3 | |* 3 | INDEX RANGE SCAN | EMP_TEST2 | 1 | 2 | --------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter(:END_DT >= :START_DT) 3 - access(SUBSIDIARY_ID = :SUBS_ID AND DATE_OF_BIRTH >= :START_DT AND DATE_OF_BIRTH <= :END_T) 
+
+PostgreSQL
+servidor SQL
+
+Finalmente, há o operador between . Ele permite que você especifique os limites superior e inferior em uma única condição:
+
+ DATE_OF_BIRTH BETWEEN '01-JAN-71' AND '10-JAN-71' 
+
+Observe que between sempre inclui os valores especificados, assim como usar os operadores menor ou igual a ( <= ) e maior ou igual a ( >= ):
+
+  DATE_OF_BIRTH >= '01-JAN-71' AND DATE_OF_BIRTH <= '10-JAN-71' 
 
 
-Operadores de desigualdade como < , > e between podem usar índices exatamente como o operador igual explicado acima . Mesmo um filtro LIKE pode - sob certas circunstâncias - usar um índice como as condições de alcance. 
-O uso dessas operações limita a escolha da ordem das colunas em índices de várias colunas. Essa limitação pode até mesmo excluir todas as opções de indexação ótimas - existem consultas onde simplesmente não é possível definir uma ordem de coluna "correta". 
-Conteúdo 
-1. Maior, Menos e BETWEEN - A ordem das colunas revisitada 
-2. Indexação SQL LIKE Filters - LIKE não é para pesquisa de texto completo 
-3. Index Combine - Por que não usar um índice para cada coluna? 
-Maior, Menos e BETWEEN 
 
 
-O maior risco de desempenho de um INDIAN INDEX RANGE SCAN é o percurso de nó-folha . Portanto, é a regra de ouro da indexação manter o intervalo de índices digitalizados tão pequeno quanto possível. Você pode verificar isso perguntando a si mesmo onde uma varredura de índices começa e onde termina. 
-A questão é fácil de responder se a instrução SQL menciona as condições de início e término explicitamente: 
- SELECT first_name, last_name, date_of_birth FROM employees WHERE date_of_birth >= TO_DATE(?, 'YYYY-MM-DD') AND date_of_birth <= TO_DATE(?, 'YYYY-MM-DD') 
-Um índice em DATE_OF_BIRTH só é DATE_OF_BIRTH no DATE_OF_BIRTH especificado. A digitalização começa na primeira data e termina na segunda. Não podemos restringir o intervalo de índices digitalizados ainda mais. 
-As condições de partida e parada são menos óbvias se uma segunda coluna se torna envolvida: 
- SELECT first_name, last_name, date_of_birth FROM employees WHERE date_of_birth >= TO_DATE(?, 'YYYY-MM-DD') AND date_of_birth <= TO_DATE(?, 'YYYY-MM-DD') AND subsidiary_id = ? 
-É claro que um índice ideal tem de cobrir ambas as colunas, mas a questão é em que ordem? 
-As figuras a seguir mostram o efeito da ordem das colunas no intervalo de índices varridos. Para esta ilustração buscamos todos os funcionários da subsidiária 27 que nasceram entre 01 de janeiro e 9 de janeiro de 1971. 
-A Figura 2.2 visualiza um detalhe do índice em DATE_OF_BIRTH e SUBSIDIARY_ID - nessa ordem. Onde o banco de dados começará a seguir a cadeia do nó da folha, ou para colocá-lo de outra maneira: onde a árvore atravessar final? 
+
 
 Indexação de filtros LIKE 
 
