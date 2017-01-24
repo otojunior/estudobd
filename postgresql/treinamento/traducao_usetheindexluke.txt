@@ -244,143 +244,263 @@ O plano de execução revela que o banco de dados não usa o índice. Em vez dis
  
 O banco de dados não usa o índice porque ele não pode usar colunas individuais de um índice concatenado arbitrariamente. Uma análise mais detalhada da estrutura do índice torna isso claro.
  
-Um índice concatenado é apenas um índice de árvore B como qualquer outro que mantém os dados indexados em uma lista ordenada. O banco de dados considera cada coluna de acordo com sua posição na definição do índice para classificar as entradas de índice. A primeira coluna é o critério de classificação primário ea segunda coluna determina a ordem somente se duas entradas tiverem o mesmo valor na primeira coluna e assim por diante. 
-Importante 
-Um índice concatenado é um índice em várias colunas . 
-A ordenação de um índice de duas colunas é, portanto, como a ordenação de uma lista telefônica: é primeiro classificado por sobrenome, em seguida, pelo primeiro nome. Isso significa que um índice de duas colunas não suporta a pesquisa na segunda coluna sozinho; Que seria como procurar uma lista telefônica pelo primeiro nome. 
-Figura 2.1 Índice Concatenado 
+Um índice concatenado é apenas um índice de árvore B como qualquer outro que mantém os dados indexados em uma lista ordenada. O banco de dados considera cada coluna de acordo com sua posição na definição do índice para classificar as entradas de índice. A primeira coluna é o critério de classificação primário e a segunda coluna determina a ordem somente se duas entradas tiverem o mesmo valor na primeira coluna e assim por diante. 
 
-O trecho de índice na Figura 2.1 mostra que as entradas para a subsidiária 20 não são armazenadas próximas uma da outra. Também é evidente que não existem entradas com SUBSIDIARY_ID = 20 na árvore, embora existam nos nós de folha. A árvore é, portanto, inútil para esta consulta. 
-Dica 
-A visualização de um índice ajuda a compreender quais consultas o índice suporta. Você pode consultar o banco de dados para recuperar as entradas na ordem do índice (sintaxe SQL: 2008, consulte Para soluções proprietárias usando LIMIT , TOP ou ROWNUM ): 
- SELECT <INDEX COLUMN LIST> FROM <TABLE> ORDER BY <INDEX COLUMN LIST> FETCH FIRST 100 ROWS ONLY 
-Se você colocar a definição do índice eo nome da tabela na consulta, você obterá um exemplo do índice. Pergunte a si mesmo se as linhas solicitadas estão agrupadas em um local central. Se não, a árvore de índice não pode ajudar a encontrar esse lugar. 
-SUBSIDIARY_ID , claro, SUBSIDIARY_ID outro índice em SUBSIDIARY_ID para melhorar a SUBSIDIARY_ID de consulta. Existe, contudo, uma solução melhor - pelo menos se assumirmos que pesquisar EMPLOYEE_ID sozinho não faz sentido. 
-Podemos aproveitar o fato de que a primeira coluna de índice é sempre utilizável para pesquisa. Novamente, é como uma lista telefônica: você não precisa saber o primeiro nome para procurar pelo sobrenome. O truque é inverter a ordem da coluna de índice para que o SUBSIDIARY_ID esteja na primeira posição: 
- CREATE UNIQUE INDEX EMPLOYEES_PK ON EMPLOYEES ( SUBSIDIARY_ID, EMPLOYEE_ID ) 
+A ordenação de um índice de duas colunas é, portanto, como a ordenação de uma lista telefônica: é primeiro classificado por nome, em seguida, pelo sobrenome. Isso significa que um índice de duas colunas não suporta a pesquisa na segunda coluna sozinho; que seria como procurar uma lista telefônica pelo sobrenome. 
+
+[[[Figura 2.1 Índice Concatenado ]]]
+
+O trecho de índice na Figura 2.1 mostra que as entradas para a subsidiária 20 não são armazenadas próximas uma da outra. Também é evidente que não existem entradas com SUBSIDIARY_ID = 20 na árvore, embora existam nos nós de folha. A árvore é, portanto, inútil para esta consulta.
+ 
+ 
+Nós podemos, claro, adicionar outro índice em SUBSIDIARY_ID para melhorar performance da consulta. Existe, contudo, uma solução melhor - pelo menos se assumirmos que pesquisar EMPLOYEE_ID sozinho não faz sentido.
+
+Podemos aproveitar o fato de que a primeira coluna de índice é sempre utilizável para pesquisa. Novamente, é como uma lista telefônica: você não precisa saber o sobrenome para procurar pelo nome. O truque é inverter a ordem da coluna de índice para que o SUBSIDIARY_ID esteja na primeira posição: 
+ 
+CREATE UNIQUE INDEX EMPLOYEES_PK ON EMPLOYEES ( SUBSIDIARY_ID, EMPLOYEE_ID ) 
+
 Ambas as colunas em conjunto ainda são exclusivas para consultas com a chave primária completa ainda pode usar um INDEX UNIQUE SCAN mas a seqüência de entradas de índice é totalmente diferente. O SUBSIDIARY_ID tornou-se o critério de classificação primário. Isso significa que todas as entradas para uma subsidiária estão no índice consecutivamente para que o banco de dados possa usar a árvore B para encontrar sua localização. 
+
 Importante 
-A consideração mais importante ao definir um índice concatenado é como escolher a ordem das colunas para que possa ser usada com a maior freqüência possível. 
-O plano de execução confirma que o banco de dados usa o índice "invertido". O SUBSIDIARY_ID sozinho não é mais SUBSIDIARY_ID , então o banco de dados deve seguir os nós de folha para encontrar todas as entradas correspondentes: é, portanto, usando a operação INDIAN INDEX RANGE SCAN . 
-DB2 
-MySQL 
-Oráculo 
- -------------------------------------------------------------- |Id |Operation | Name | Rows | Cost | -------------------------------------------------------------- | 0 |SELECT STATEMENT | | 106 | 75 | | 1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 106 | 75 | |*2 | INDEX RANGE SCAN | EMPLOYEE_PK | 106 | 2 | -------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 2 - access("SUBSIDIARY_ID"=20) 
-PostgreSQL 
-servidor SQL 
-Em geral, um banco de dados pode usar um índice concatenado ao pesquisar com as colunas principais (à esquerda). Um índice com três colunas pode ser usado ao pesquisar a primeira coluna, ao pesquisar com as duas primeiras colunas juntas e ao pesquisar usando todas as colunas. 
-Mesmo que a solução de dois índices ofereça um desempenho muito bom também, a solução de índice único é preferível. Ele não só economiza espaço de armazenamento, mas também a sobrecarga de manutenção para o segundo índice. Quanto menos índices tiver uma tabela, melhor será o desempenho de insert , delete e atualização. 
-Para definir um índice ótimo, você deve entender mais do que apenas como os índices funcionam - você também deve saber como o aplicativo consulta os dados. Isso significa que você precisa conhecer as combinações de colunas que aparecem na cláusula where. 
-Definir um índice ótimo é, portanto, muito difícil para consultores externos porque eles não têm uma visão geral dos caminhos de acesso do aplicativo. Consultores normalmente podem considerar uma consulta apenas. Eles não exploram o benefício extra que o índice poderia trazer para outras consultas. Administradores de banco de dados estão em uma posição semelhante como eles podem saber o esquema de banco de dados, mas não têm um conhecimento profundo sobre os caminhos de acesso. 
-O único local onde o conhecimento técnico da base de dados atende ao conhecimento funcional do domínio de negócios é o departamento de desenvolvimento. Os desenvolvedores têm uma sensação para os dados e conhecer o caminho de acesso. Eles podem indexar adequadamente para obter o melhor benefício para a aplicação global sem muito esforço. 
+
+A consideração mais importante ao definir um índice concatenado é como escolher a ordem das colunas para que possa ser usada com a maior freqüência possível.
+
+O plano de execução confirma que o banco de dados usa o índice "invertido". O SUBSIDIARY_ID sozinho não é mais único, então o banco de dados deve seguir os nós-folha para encontrar todas as entradas correspondentes: é, portanto, usando a operação INDEX RANGE SCAN. 
+
+QUERY PLAN
+----------------------------------------------
+ Bitmap Heap Scan on employees
+ (cost=24.63..1529.17 rows=1080 width=13)
+   Recheck Cond: (subsidiary_id = 2::numeric)
+   -> Bitmap Index Scan on employees_pk
+      (cost=0.00..24.36 rows=1080 width=0)
+      Index Cond: (subsidiary_id = 2::numeric)
+	  
+O PostgreSQL usa duas operações neste caso: um Bitmap Index Scan seguido de um Bitmap Heap Scan. O Bitmap Index Scan corresponde a um INDEX RANGE SCAN e o Bitmap Heap Scan equivale a um TABLE ACCESS BY INDEX ROWID com uma importante diferença: O Bitmap Index Scan recupera todos os resultados do índice, os agrupa e os orderna de acordo com a localização física dos dados e então O Bitmap Heap Scan recupera os dados da tabela. Este método reduz o número de acessos aleatórios de I/O.
+
+Em geral, um banco de dados pode usar um índice concatenado ao pesquisar com as colunas principais (à esquerda). Um índice com três colunas pode ser usado ao pesquisar a primeira coluna, ao pesquisar com as duas primeiras colunas juntas e ao pesquisar usando todas as colunas.
+ 
+Mesmo que a solução de dois índices ofereça um desempenho muito bom também, a solução de índice único é preferível. Ele não só economiza espaço de armazenamento, mas também a sobrecarga de manutenção para o segundo índice. Quanto menos índices tiver uma tabela, melhor será o desempenho de insert, delete e update. 
+
+Para definir um índice ótimo, você deve entender mais do que apenas como os índices funcionam - você também deve saber como o aplicativo consulta os dados. Isso significa que você precisa conhecer as combinações de colunas que aparecem na cláusula where.
+ 
+Definir um índice ótimo é, portanto, muito difícil para consultores externos porque eles não têm uma visão geral de todas as consultas do aplicativo. Consultores normalmente consideraram uma consulta apenas. Eles não exploram o benefício extra que o índice poderia trazer para outras consultas. Administradores de banco de dados estão em uma posição semelhante: eles podem saber o esquema de banco de dados, mas não têm um conhecimento profundo sobre todas as consultas do sistema.
+
+O único lugar onde o conhecimento técnico da base de dados atende ao conhecimento funcional do domínio de negócios é o departamento de desenvolvimento. Os desenvolvedores conhecem melhor os dados e as consultas. Eles podem indexar adequadamente para obter o melhor benefício para a aplicação global sem muito esforço. 
+
 Índices Lentos, Parte II 
+------------------------
 
+A seção anterior explicou como obter benefícios adicionais de um índice existente alterando a ordem de suas colunas, mas o exemplo considerou apenas duas instruções SQL. Alterar um índice, no entanto, pode afetar todas as consultas na tabela indexada. Esta seção explica como os bancos de dados escolhem um índice e demonstram os possíveis efeitos colaterais ao alterar índices existentes.
+ 
+O índice EMPLOYEE_PK adotado melhora o desempenho de todas as consultas que pesquisam somente por subsidiárias. É, no entanto, usável para todas as consultas que pesquisam por SUBSIDIARY_ID independentemente de existirem critérios de pesquisa adicionais. Isso significa que o índice é utilizável para consultas usadas por outro índice em outra parte da cláusula where. Nesse caso, se houver várias alternativas de uso de índices disponíveis, é o trabalho do otimizador escolher a melhor.
 
-A seção anterior explicou como obter benefícios adicionais de um índice existente alterando sua ordem de coluna, mas o exemplo considerou apenas duas instruções SQL. Alterar um índice, no entanto, pode afetar todas as consultas na tabela indexada. Esta seção explica como os bancos de dados escolhem um índice e demonstram os possíveis efeitos colaterais ao alterar índices existentes. 
-O índice EMPLOYEE_PK adotado melhora o desempenho de todas as consultas que pesquisam somente por subsidiárias. É, no entanto, SUBSIDIARY_ID para todas as SUBSIDIARY_ID pesquisam por SUBSIDIARY_ID independentemente de existirem SUBSIDIARY_ID critérios de pesquisa adicionais. Isso significa que o índice se torna utilizável para consultas que usaram para usar outro índice com outra parte da cláusula where. Nesse caso, se houver vários caminhos de acesso disponíveis, é o trabalho do otimizador escolher o melhor. 
-O Query Optimizer 
-Alterar um índice também pode ter efeitos colaterais desagradáveis. No nosso exemplo, é o aplicativo de diretório telefônico interno que se tornou muito lento desde a fusão. A primeira análise identificou a seguinte consulta como a causa da desaceleração: 
- SELECT first_name, last_name, subsidiary_id, phone_number FROM employees WHERE last_name = 'WINAND' AND subsidiary_id = 30 
+Alterar um índice também pode ter efeitos colaterais desagradáveis. No nosso exemplo, é o aplicativo de diretório telefônico interno que se tornou muito lento desde a fusão. A primeira análise identificou a seguinte consulta como a causa da lentidão:
+ 
+SELECT first_name, last_name, subsidiary_id, phone_number 
+FROM employees 
+WHERE last_name = 'WINAND' AND subsidiary_id = 30 
+
 O plano de execução é: 
+
 Exemplo 2.1 Plano de Execução com Índice de Chave Primária Revisado 
- --------------------------------------------------------------- |Id |Operation | Name | Rows | Cost | --------------------------------------------------------------- | 0 |SELECT STATEMENT | | 1 | 30 | |*1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 1 | 30 | |*2 | INDEX RANGE SCAN | EMPLOYEES_PK | 40 | 2 | --------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter("LAST_NAME"='WINAND') 2 - access("SUBSIDIARY_ID"=30) 
-O plano de execução usa um índice e tem um valor de custo total de 30. Até agora, tão bom. No entanto, é suspeito que ele use o índice que acabamos de mudar - isso é motivo suficiente para suspeitar que a nossa mudança de índice causou o problema de desempenho, especialmente quando se tem em mente a definição do índice antigo - começou com a coluna EMPLOYEE_ID que não faz parte do índice where cláusula em tudo. A consulta não poderia usar esse índice antes. 
-Para uma análise mais aprofundada, seria bom comparar o plano de execução antes e depois da alteração. Para obter o plano de execução original, poderíamos simplesmente implementar a definição de índice antiga novamente, porém a maioria dos bancos de dados oferece um método mais simples para evitar o uso de um índice para uma consulta específica. O exemplo a seguir usa uma dica do otimizador Oracle para esse propósito. 
- SELECT /*+ NO_INDEX(EMPLOYEES EMPLOYEE_PK) */ first_name, last_name, subsidiary_id, phone_number FROM employees WHERE last_name = 'WINAND' AND subsidiary_id = 30 
+
+---------------------------------------------------------------
+|Id |Operation                   | Name         | Rows | Cost |
+---------------------------------------------------------------
+| 0 |SELECT STATEMENT            |              |    1 |   30 |
+|*1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES    |    1 |   30 |
+|*2 |  INDEX RANGE SCAN          | EMPLOYEES_PK |   40 |    2 |
+---------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+  1 - filter("LAST_NAME"='WINAND')
+  2 - access("SUBSIDIARY_ID"=30) 
+ 
+O plano de execução usa um índice e tem um valor de custo total de 30. Até agora, tudo bem. No entanto, é suspeito que ele use o índice que acabamos de mudar - isso é motivo suficiente para suspeitar que a nossa mudança de índice causou o problema de desempenho, especialmente quando se tem em mente a definição do índice antigo - que começava com a coluna EMPLOYEE_ID que não faz parte da cláusula where. A consulta não poderia usar esse índice antes.
+
+Para uma análise mais aprofundada, seria bom comparar o plano de execução antes e depois da alteração. Para obter o plano de execução original, poderíamos simplesmente implementar a definição de índice antiga novamente, porém a maioria dos bancos de dados oferece um método mais simples para evitar o uso de um índice para uma consulta específica. O exemplo a seguir usa um hint do otimizador Oracle para esse propósito.
+
+SELECT /*+ NO_INDEX(EMPLOYEES EMPLOYEE_PK) */ 
+	first_name, last_name, subsidiary_id, phone_number 
+FROM employees 
+WHERE last_name = 'WINAND' AND subsidiary_id = 30
+
 O plano de execução que era presumivelmente usado antes da mudança do índice não usava nenhum índice: 
- ---------------------------------------------------- | Id | Operation | Name | Rows | Cost | ---------------------------------------------------- | 0 | SELECT STATEMENT | | 1 | 477 | |* 1 | TABLE ACCESS FULL | EMPLOYEES | 1 | 477 | ---------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter("LAST_NAME"='WINAND' AND "SUBSIDIARY_ID"=30) 
-Mesmo que o TABLE ACCESS FULL deve ler e processar toda a tabela, parece ser mais rápido do que usar o índice neste caso. Isso é particularmente incomum porque a consulta corresponde apenas a uma linha. Usando um índice para encontrar uma única linha deve ser muito mais rápido do que uma varredura completa da tabela, mas neste caso não é. O índice parece ser lento. 
-Em tais casos, é melhor passar por cada etapa do plano de execução problemático. O primeiro passo é o INDEX RANGE SCAN no índice EMPLOYEES_PK . Esse índice não cobre a coluna LAST_NAME - o INDEX RANGE SCAN pode SUBSIDIARY_ID apenas o filtro SUBSIDIARY_ID ; O banco de dados Oracle mostra isso no "Predicate Information" entrada de área "2" do plano de execução. Lá você pode ver as condições que são aplicadas para cada operação. 
+
+----------------------------------------------------
+| Id | Operation         | Name      | Rows | Cost |
+----------------------------------------------------
+|  0 | SELECT STATEMENT  |           |    1 |  477 |
+|* 1 |  TABLE ACCESS FULL| EMPLOYEES |    1 |  477 |
+----------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+   1 - filter("LAST_NAME"='WINAND' AND "SUBSIDIARY_ID"=30)
+
+Mesmo que o TABLE ACCESS FULL leia e processe toda a tabela, parece ser mais rápido do que usar o índice neste caso. Isso é particularmente incomum porque a consulta corresponde apenas a uma linha. Usar um índice para encontrar uma única linha deveria ser muito mais rápido do que uma varredura completa da tabela, mas neste caso não é. O índice parece ser lento.
+ 
+Em tais casos, é melhor analisar cada etapa do plano de execução problemático. O primeiro passo é o INDEX RANGE SCAN no índice EMPLOYEES_PK. Esse índice não cobre a coluna LAST_NAME - o INDEX RANGE SCAN considera apenas o filtro SUBSIDIARY_ID; o banco de dados Oracle mostra isso no "Predicate Information" entrada de área "2" do plano de execução. Lá você pode ver as condições que são aplicadas para cada operação. 
+
 Dica 
+
 O Apêndice A, " Planos de Execução " , explica como localizar o "Predicate Information" para outros bancos de dados. 
-O INDIAN INDEX RANGE SCAN com operação ID 2 ( Exemplo 2.1 ) aplica apenas o filtro SUBSIDIARY_ID=30 . Isso significa que ele atravessa a árvore de índice para SUBSIDIARY_ID a primeira entrada para SUBSIDIARY_ID 30. Em seguida, segue a cadeia de nós folha para SUBSIDIARY_ID todas as outras entradas para essa subsidiária. O ROWIDs do INDEX RANGE SCAN é uma lista de ROWIDs que cumprem a SUBSIDIARY_ID SUBSIDIARY_ID: dependendo do tamanho da filial, pode haver apenas alguns ou pode haver muitas centenas. 
-O próximo passo é a operação de TABLE ACCESS BY INDEX ROWID . Ele usa os ROWIDs da etapa anterior para buscar as linhas - todas as colunas - da tabela. Quando a coluna LAST_NAME estiver disponível, o banco de dados poderá avaliar a parte restante da cláusula where. Isso SUBSIDIARY_ID=30 que o banco de dados tem de buscar todas as linhas para SUBSIDIARY_ID=30 antes que ele possa aplicar o filtro LAST_NAME . 
-O tempo de resposta da declaração não depende do tamanho do conjunto de resultados, mas do número de funcionários da subsidiária em particular. Se a subsidiária tem apenas alguns membros, o INDEX RANGE SCAN proporciona um melhor desempenho. No entanto, um TABLE ACCESS FULL pode ser mais rápido para uma enorme subsidiária porque ele pode ler grandes partes da tabela de uma só vez (consulte " Full Table Scan " ). 
-A consulta é lenta porque a pesquisa de índice retorna muitos ROWIDs - um para cada ROWIDs da empresa original - eo banco de dados deve buscá-los individualmente. É a combinação perfeita dos dois ingredientes que fazem um índice lento: o banco de dados lê um intervalo de índice largo e tem que buscar muitas linhas individualmente. 
-Escolher o melhor plano de execução depende da distribuição de dados da tabela, assim também o otimizador usa estatísticas sobre o conteúdo do banco de dados. No nosso exemplo, é utilizado um histograma contendo a distribuição de funcionários sobre subsidiárias. Isso permite que o otimizador estimar o número de linhas retornadas da pesquisa de índice - o resultado é usado para o cálculo do custo. 
-Estatísticas 
-Se não houver estatísticas disponíveis - por exemplo, porque elas foram excluídas - o otimizador usa valores padrão. As estatísticas padrão do banco de dados Oracle sugerem um pequeno índice com seletividade média. Elas levam à estimativa de que o INDEX RANGE SCAN 40 linhas. O plano de execução mostra essa estimativa na coluna Linhas (novamente, veja Exemplo 2.1 ). Obviamente esta é uma subestimativa grosseira, pois há 1000 funcionários trabalhando para esta subsidiária. 
-Se fornecemos estatísticas corretas, o otimizador faz um trabalho melhor. O plano de execução a seguir mostra a nova estimativa: 1.000 linhas para o INDEX RANGE SCAN . Consequentemente, calculou um valor de custo mais elevado para o acesso subsequente à tabela. 
- --------------------------------------------------------------- |Id |Operation | Name | Rows | Cost | --------------------------------------------------------------- | 0 |SELECT STATEMENT | | 1 | 680 | |*1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 1 | 680 | |*2 | INDEX RANGE SCAN | EMPLOYEES_PK | 1000 | 4 | --------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter("LAST_NAME"='WINAND') 2 - access("SUBSIDIARY_ID"=30) 
-O valor de custo de 680 é ainda mais alto que o valor de custo para o plano de execução usando a EXPLORAÇÃO FULL TABLE SCAN (477). Portanto, o otimizador preferirá automaticamente a varredura de FULL TABLE SCAN . 
-Este exemplo de um índice lento não deve ocultar o fato de que a indexação adequada é a melhor solução. É claro que a pesquisa de sobrenome é melhor suportada por um índice em LAST_NAME : 
- CREATE INDEX emp_name ON employees (last_name) 
+
+O INDEX RANGE SCAN com operação ID 2 (Exemplo 2.1) aplica apenas o filtro SUBSIDIARY_ID=30. Isso significa que ele atravessa a árvore de índice para encontrar a primeira entrada para SUBSIDIARY_ID 30. Em seguida, segue a cadeia de nós-folha para encontrar todas as outras entradas para essa subsidiária. O resultado do INDEX RANGE SCAN é uma lista de ROWIDs que cumprem a condição da SUBSIDIARY_ID. Dependendo do tamanho da filial, pode haver apenas algumas ou pode haver muitas centenas.
+
+O próximo passo é a operação de TABLE ACCESS BY INDEX ROWID. Ele usa os ROWIDs da etapa anterior para recuperar as linhas (todas as colunas) da tabela. Quando a coluna LAST_NAME for encontrada, o banco de dados poderá processar a parte restante da cláusula where. Isso significa que o banco de dados tem de recuperar todas as linhas para SUBSIDIARY_ID=30 antes que ele possa aplicar o filtro LAST_NAME .
+ 
+O tempo de resposta da consulta não depende da quantidade do conjunto de resultados, mas do número de funcionários da subsidiária em particular. Se a subsidiária tem apenas alguns membros, o INDEX RANGE SCAN proporciona um melhor desempenho. No entanto, um TABLE ACCESS FULL pode ser mais rápido para uma enorme subsidiária porque ela deverá ler grande parte da tabela de uma só vez (consulte "Full Table Scan").
+ 
+A consulta é lenta porque a pesquisa de índice retorna muitos ROWIDs (um para cada ROWIDs da empresa original) e o banco de dados deve recuperá-los individualmente. É a combinação perfeita dos dois ingredientes que fazem um índice lento: o banco de dados lê um intervalo grande de índice e tem que recuperar muitas linhas individualmente.
+
+Escolher o melhor plano de execução depende da distribuição de dados da tabela, assim sendo, o otimizador usa estatísticas sobre o conteúdo do banco de dados. No nosso exemplo, é utilizado um histograma contendo a distribuição de funcionários sobre subsidiárias. Isso permite que o otimizador estime o número de linhas retornadas da pesquisa de índice. O resultado é usado para o cálculo do custo.
+ 
+Estatísticas
+ 
+Se não houver estatísticas disponíveis (por exemplo, se elas tiverem sido excluídas), o otimizador usa valores padrão. As estatísticas padrão do banco de dados Oracle sugerem um pequeno índice com seletividade média. Elas consideram à estimativa de que o INDEX RANGE SCAN retorna 40 linhas. O plano de execução mostra essa estimativa na coluna Rows (novamente, veja Exemplo 2.1). Obviamente esta é uma subestimativa grosseira, pois há 1000 funcionários trabalhando para esta subsidiária.
+
+Se fornecemos estatísticas corretas, o otimizador faz um trabalho melhor. O plano de execução a seguir mostra a nova estimativa: 1000 linhas para o INDEX RANGE SCAN. Consequentemente, calculou um valor de custo mais elevado para o acesso subsequente à tabela.
+ 
+ ---------------------------------------------------------------
+|Id |Operation                   | Name         | Rows | Cost |
+---------------------------------------------------------------
+| 0 |SELECT STATEMENT            |              |    1 |  680 |
+|*1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES    |    1 |  680 |
+|*2 |  INDEX RANGE SCAN          | EMPLOYEES_PK | 1000 |    4 |
+---------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+  1 - filter("LAST_NAME"='WINAND')
+  2 - access("SUBSIDIARY_ID"=30)
+  
+O valor de custo de 680 é ainda mais alto que o valor de custo para o plano de execução usando FULL TABLE SCAN (477). Portanto, o otimizador preferirá automaticamente a varredura de FULL TABLE SCAN.
+ 
+Este exemplo de um índice lento não deve ocultar o fato de que a indexação adequada é a melhor solução. É claro que a pesquisa de sobrenome é mais performática por um índice em LAST_NAME:
+ 
+CREATE INDEX emp_name ON employees (last_name)
+ 
 Usando o novo índice, o otimizador calcula um valor de custo de 3: 
+
 Exemplo 2.2 Plano de Execução com Índice Dedicado 
- -------------------------------------------------------------- | Id | Operation | Name | Rows | Cost | -------------------------------------------------------------- | 0 | SELECT STATEMENT | | 1 | 3 | |* 1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 1 | 3 | |* 2 | INDEX RANGE SCAN | EMP_NAME | 1 | 1 | -------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter("SUBSIDIARY_ID"=30) 2 - access("LAST_NAME"='WINAND') 
-O acesso ao índice fornece - de acordo com a estimativa do otimizador - apenas uma linha. O banco de dados, portanto, tem que buscar apenas essa linha da tabela: este é definitivamente mais rápido do que uma varredura FULL TABLE SCAN . Um índice devidamente definido ainda é melhor do que a varredura de tabela completa original. 
-Os dois planos de execução do Exemplo 2.1 e Exemplo 2.2 são quase idênticos. O banco de dados executa as mesmas operações eo otimizador calculou valores de custo semelhantes, no entanto, o segundo plano funciona muito melhor. A eficiência de um INDIAN INDEX RANGE SCAN pode variar em uma ampla faixa, especialmente quando é seguido por um acesso à tabela. Usar um índice não significa automaticamente que uma instrução seja executada da melhor maneira possível. 
+ 
+--------------------------------------------------------------
+| Id | Operation                   | Name      | Rows | Cost |
+--------------------------------------------------------------
+|  0 | SELECT STATEMENT            |           |    1 |    3 |
+|* 1 |  TABLE ACCESS BY INDEX ROWID| EMPLOYEES |    1 |    3 |
+|* 2 |   INDEX RANGE SCAN          | EMP_NAME  |    1 |    1 |
+--------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+   1 - filter("SUBSIDIARY_ID"=30)
+   2 - access("LAST_NAME"='WINAND')
+ 
+O acesso ao índice fornece (de acordo com a estimativa do otimizador) apenas uma linha. O banco de dados, portanto, tem que recuperar apenas essa linha da tabela: isto é definitivamente mais rápido do que uma varredura FULL TABLE SCAN. Um índice devidamente definido ainda é melhor do que a varredura de tabela completa original.
+
+Os dois planos de execução do Exemplo 2.1 e Exemplo 2.2 são quase idênticos. O banco de dados executa as mesmas operações e o otimizador calculou valores de custo semelhantes, no entanto, o segundo plano funciona muito melhor. A eficiência de um INDEX RANGE SCAN pode variar em uma ampla faixa, especialmente quando é seguido por um acesso à tabela. Usar um índice não significa automaticamente que uma instrução seja executada da melhor maneira possível.
+
 Funções 
+--------
 
+O índice em LAST_NAME melhorou consideravelmente o desempenho, mas exige que você consulte usando o mesmo caso (superior/inferior) como está armazenado no banco de dados. Esta seção explica como remover essa restrição sem uma redução no desempenho. 
 
-O índice de LAST_NAME melhorou consideravelmente o desempenho, mas exige que você procure usando o mesmo caso (superior / inferior) armazenado no banco de dados. Esta seção explica como remover essa restrição sem uma diminuição no desempenho. 
-DB2 
-MySQL 
-Oráculo 
-O banco de dados Oracle suporta índices baseados em função desde a versão 8 i . As colunas virtuais foram adicionalmente adicionadas com 11 g . 
-PostgreSQL 
-servidor SQL 
-Se você gosta da minha maneira de explicar as coisas, você vai adorar o meu livro . 
-Conteúdo 
-1. Busca de maiúsculas e minúsculas - UPPER e LOWER 
-2. Funções definidas pelo usuário - Limitações de índices baseados em função 
-3. Sobre- Indexação - Evite redundância 
 Pesquisa de maiúsculas e minúsculas usando UPPER ou LOWER 
+---------------------------------------------------------
 
+Ignorar maiúsculas e minúsculas em uma cláusula where é muito simples. Você pode, por exemplo, converter ambos os lados da comparação para tudo maiúsculo:
 
-Ignorar o caso em uma cláusula where é muito simples. Você pode, por exemplo, converter ambos os lados da comparação para todas as maiúsculas notação: 
- SELECT first_name, last_name, phone_number FROM employees WHERE UPPER(last_name) = UPPER('winand') 
-Independentemente da capitalização usada para o termo de pesquisa ou a coluna LAST_NAME , a função UPPER faz com que eles LAST_NAME como desejado. 
-Nota 
-Outra maneira de fazer distinção entre maiúsculas e minúsculas é usar um "agrupamento" diferente. As colações padrão usadas pelo SQL Server e MySQL não distinguem entre letras maiúsculas e minúsculas - elas são insensíveis a maiúsculas e minúsculas por padrão. 
+SELECT first_name, last_name, phone_number 
+FROM employees 
+WHERE UPPER(last_name) = UPPER('winand')
+
+Independentemente da capitalização usada para o termo de pesquisa ou a coluna LAST_NAME, a função UPPER faz com que eles fiquem como desejado. 
+
 A lógica dessa consulta é perfeitamente razoável, mas o plano de execução não é: 
-DB2 
-Oráculo 
- ---------------------------------------------------- | Id | Operation | Name | Rows | Cost | ---------------------------------------------------- | 0 | SELECT STATEMENT | | 10 | 477 | |* 1 | TABLE ACCESS FULL | EMPLOYEES | 10 | 477 | ---------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 1 - filter(UPPER("LAST_NAME")='WINAND') 
-PostgreSQL 
-É um retorno do nosso velho amigo a varredura completa da tabela. Embora haja um índice em LAST_NAME , ele é LAST_NAME porque a pesquisa não está em LAST_NAME mas em UPPER(LAST_NAME) . Do ponto de vista do banco de dados, isso é algo completamente diferente . 
-Esta é uma armadilha em que todos podemos cair. Reconhecemos a relação entre LAST_NAME e UPPER(LAST_NAME) instantaneamente e esperamos que o banco de dados "veja" também. Na realidade, a visão do otimizador é mais parecida com isto: 
- SELECT first_name, last_name, phone_number FROM employees WHERE BLACKBOX(...) = 'WINAND' 
-A função UPPER é apenas uma caixa preta. Os parâmetros para a função não são relevantes porque não há relação geral entre os parâmetros da função eo resultado. 
+
+QUERY PLAN
+------------------------------------------------------
+ Seq Scan on employees
+   (cost=0.00..1722.00 rows=50 width=17)
+   Filter: (upper((last_name)::text) = 'WINAND'::text)
+
+É um retorno do nosso velho amigo: a varredura completa da tabela. Embora haja um índice em LAST_NAME, ele é ignorado porque a pesquisa não está em LAST_NAME mas em UPPER(LAST_NAME). Do ponto de vista do banco de dados, isso é algo completamente diferente.
+ 
+Esta é uma armadilha em que todos podemos cair. Reconhecemos a relação entre LAST_NAME e UPPER(LAST_NAME) instantaneamente e esperamos que o banco de dados "veja" também. Entretanto, a visão do otimizador é mais parecida com isto: 
+
+SELECT first_name, last_name, phone_number 
+FROM employees 
+WHERE BLACKBOX(...) = 'WINAND' 
+
+A função UPPER é apenas uma caixa preta. Os parâmetros para a função não são relevantes porque não há relação geral entre os parâmetros da função e o resultado. 
 Dica 
-Substitua o nome da função por BLACKBOX para entender o ponto de vista do otimizador. 
-Compilar Avaliação de Tempo 
-Para suportar essa consulta, precisamos de um índice que cubra o termo de pesquisa real. Isso LAST_NAME não LAST_NAME um índice em LAST_NAME mas em UPPER(LAST_NAME) : 
- CREATE INDEX emp_up_name ON employees ( UPPER(last_name) ) 
-Um índice cuja definição contém funções ou expressões é um chamado índice baseado em função (FBI). Em vez de copiar os dados da coluna diretamente para o índice, um índice baseado em função aplica a função primeiro e coloca o resultado no índice. Como resultado, o índice armazena os nomes em todas as maiúsculas notação. 
+
+Para dar suporte a essa consulta, precisamos de um índice que cubra o termo de pesquisa real. Isso significa que não funcionará um índice em LAST_NAME mas sim em UPPER(LAST_NAME):
+
+CREATE INDEX emp_up_name ON employees (UPPER(last_name)) 
+
+Um índice cuja definição contém funções ou expressões é chamado índice baseado em função (FBI - function-based index). Em vez de copiar os dados da coluna diretamente para o índice, um índice baseado em função aplica a função primeiro e coloca o resultado no índice. Como resultado, o índice armazena os nomes em maiúsculo.
+ 
 O banco de dados pode usar um índice baseado em função se a expressão exata da definição do índice aparecer em uma instrução SQL, como no exemplo acima. O plano de execução confirma isso: 
-DB2 
-Oráculo 
- -------------------------------------------------------------- |Id |Operation | Name | Rows | Cost | -------------------------------------------------------------- | 0 |SELECT STATEMENT | | 100 | 41 | | 1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 100 | 41 | |*2 | INDEX RANGE SCAN | EMP_UP_NAME | 40 | 1 | -------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 2 - access(UPPER("LAST_NAME")='WINAND') 
-PostgreSQL 
-É uma varredura regular da escala INDEX RANGE SCAN conforme descrito no Capítulo 1 . O banco de dados atravessa a árvore B e segue a cadeia do nó da folha. Não há operações ou palavras-chave dedicadas para índices baseados em função. 
-Atenção 
-Às vezes, as ferramentas ORM usam UPPER e LOWER sem o conhecimento do desenvolvedor. O Hibernate, por exemplo, injeta um LOWER implícito para pesquisas que não diferenciam maiúsculas de minúsculas. 
-O plano de execução ainda não é o mesmo que estava na seção anterior sem UPPER ; A estimativa de contagem de linha é muito alta. É particularmente estranho que o otimizador espera obter mais linhas da tabela do que o INDEX RANGE SCAN oferece em primeiro lugar. Como ele pode buscar 100 linhas da tabela se a varredura de índice anterior retornou apenas 40 linhas? A resposta é que não pode. Contradicting estimativas como esta muitas vezes indicam problemas com as estatísticas. Neste caso específico, é porque o banco de dados Oracle não atualiza as estatísticas da tabela ao criar um novo índice (consulte também " Estatísticas do Oracle para Índices Baseados em Funções " ). 
-Estatísticas do Oracle para Índices Baseados em Funções 
+
+Bitmap Heap Scan on employees
+  (cost=4.65..178.65 rows=50 width=17)
+  Recheck Cond: (upper((last_name)::text) = 'WINAND'::text)
+  -> Bitmap Index Scan on emp_up_name
+     (cost=0.00..4.64 rows=50 width=0)
+     Index Cond: (upper((last_name)::text) = 'WINAND'::text)
+
+É um INDEX RANGE SCAN conforme descrito no Capítulo 1. O banco de dados percorre a árvore B e segue a cadeia do nó-folha. Não há operações ou palavras-chave dedicadas para índices baseados em função.
+
+Atenção:
+
+Às vezes, as ferramentas ORM usam UPPER e LOWER sem o conhecimento do desenvolvedor. O Hibernate, por exemplo, injeta um LOWER implícito para pesquisas que não diferenciam maiúsculas de minúsculas.
+ 
+O plano de execução ainda não é o mesmo que estava na seção anterior sem UPPER; A estimativa de contagem de linhas é muito alta. É particularmente estranho que o otimizador espere obter mais linhas da tabela do que um INDEX RANGE SCAN oferece em primeiro lugar. Como ele pode buscar 100 linhas da tabela se a varredura de índice anterior retornou apenas 40 linhas? A resposta é que não pode. Estimativas contraditórias como esta muitas vezes indicam problemas nas estatísticas. Neste caso específico, é porque o banco de dados Oracle não atualiza as estatísticas da tabela ao criar um novo índice (consulte também "Estatísticas do Oracle para Índices Baseados em Funções").
+ 
 Depois de atualizar as estatísticas, o otimizador calcula estimativas mais precisas: 
-Oráculo 
- -------------------------------------------------------------- |Id |Operation | Name | Rows | Cost | -------------------------------------------------------------- | 0 |SELECT STATEMENT | | 1 | 3 | | 1 | TABLE ACCESS BY INDEX ROWID| EMPLOYEES | 1 | 3 | |*2 | INDEX RANGE SCAN | EMP_UP_NAME | 1 | 1 | -------------------------------------------------------------- Predicate Information (identified by operation id): --------------------------------------------------- 2 - access(UPPER("LAST_NAME")='WINAND') 
-PostgreSQL 
-Nota 
-As chamadas "estatísticas estendidas" sobre expressões e grupos de colunas foram introduzidas com o Oracle release 11 g . 
-Embora as estatísticas atualizadas não melhorem o desempenho de execução neste caso - o índice foi usado corretamente de qualquer maneira - é sempre uma boa idéia verificar as estimativas do otimizador. O número de linhas processadas para cada operação (estimativa de cardinalidade) é uma figura particularmente importante que também é mostrada nos planos de execução do SQL Server e do PostgreSQL. 
-Dica 
-O Apêndice A, " Planos de Execução " , descreve as estimativas de contagem de linhas nos planos de execução de outros bancos de dados. 
-O SQL Server e o MySQL não suportam índices baseados em função como descrito, mas ambos oferecem uma solução alternativa via colunas computadas ou geradas. Para fazer uso disto, você tem que primeiro adicionar uma coluna computada para a tabela que pode ser indexada depois: 
-MySQL 
-servidor SQL 
- ALTER TABLE employees ADD last_name_up AS UPPER(last_name) 
- CREATE INDEX emp_up_name ON employees ( last_name_up ) 
-SQL Server e MySQL são capazes de usar esse índice sempre que a expressão indexada aparece na instrução. Em alguns casos simples, SQL Server e MySQL podem usar esse índice mesmo se a consulta permanece inalterada. Às vezes, no entanto, a consulta deve alterar a consulta para se referir ao nome das novas colunas para usar o índice. Sempre verifique o plano de execução em caso de dúvida. 
+
+QUERY PLAN
+----------------------------------------------------------
+ Index Scan using emp_up_name on employees
+   (cost=0.00..8.28 rows=1 width=17)
+   Index Cond: (upper((last_name)::text) = 'WINAND'::text)
+
+Como a estimativa de contagem de linhas caiu de 50 do exemplo acima para 1 neste plano de execução, o planejador prefere usar uma simples operação de INDEX SCAN.
+   
+Embora as estatísticas atualizadas não melhorem o desempenho de execução neste caso (o índice foi usado corretamente de qualquer maneira), é sempre uma boa idéia verificar as estimativas do otimizador. O número de linhas processadas para cada operação (estimativa de cardinalidade) é uma figura particularmente importante que também é mostrada nos planos de execução do SQL Server e do PostgreSQL.
+ 
+Dica:
+
+O Apêndice A, "Planos de Execução", descreve as estimativas de contagem de linhas nos planos de execução de outros bancos de dados. 
+O SQL Server e o MySQL não suportam índices baseados em função como descrito, mas ambos oferecem uma solução alternativa via colunas computadas ou geradas. Para fazer uso disto, você tem que primeiro adicionar uma coluna computada para a tabela que pode ser indexada depois.
+
+SQL Server e MySQL são capazes de usar esse índice sempre que a expressão indexada aparece na instrução. Em alguns casos simples, SQL Server e MySQL podem usar esse índice mesmo se a consulta permanecer inalterada. Às vezes, no entanto, a consulta deve alterar a consulta para se referir ao nome das novas colunas para usar o índice. Sempre verifique o plano de execução em caso de dúvida. 
+
 Funções definidas pelo usuário 
+------------------------------
+
+A indexação baseada em funções é uma abordagem muito genérica. Além de funções como UPPER você também pode indexar expressões como A + B e até mesmo usar funções definidas pelo usuário na definição do índice.
+
+Há uma exceção importante. Por exemplo, não é possível referir-se a data atual em uma definição de índice, nem direta ou indiretamente, como no exemplo a seguir. 
+
+CREATE FUNCTION get_age (date_of_birth DATE) 
+RETURN NUMBER AS 
+	BEGIN 
+		RETURN TRUNC(MONTHS_BETWEEN(SYSDATE, date_of_birth)/12); 
+	END 
+
+A função GET_AGE usa a data atual (SYSDATE) para calcular a idade com base na data de nascimento fornecida. Você pode usar esta função em todas as partes de uma consulta SQL, por exemplo, em um select e em cláusulas where : 
+
+SELECT first_name, last_name, get_age(date_of_birth) 
+FROM employees 
+WHERE get_age(date_of_birth) = 42
 
 
-A indexação baseada em funções é uma abordagem muito genérica. Além de funções como UPPER você também pode indexar expressões como A + B e até mesmo usar funções definidas pelo usuário na definição do índice. 
-Há uma exceção importante. Por exemplo, não é possível referir-se ao tempo atual em uma definição de índice, nem direta nem indiretamente, como no exemplo a seguir. 
- CREATE FUNCTION get_age (date_of_birth DATE) RETURN NUMBER AS BEGIN RETURN TRUNC(MONTHS_BETWEEN(SYSDATE, date_of_birth)/12) ; END 
-A função GET_AGE usa a data atual ( SYSDATE ) para calcular a idade com base na data de nascimento fornecida. Você pode usar esta função em todas as partes de uma consulta SQL, por exemplo, em select e as cláusulas where : 
- SELECT first_name, last_name, get_age(date_of_birth) FROM employees WHERE get_age(date_of_birth) = 42 
 A consulta lista todos os funcionários de 42 anos. Usar um índice baseado em função é uma idéia óbvia para otimizar essa consulta, mas você não pode usar a função GET_AGE em uma definição de índice porque não é determinística . Isso significa que o resultado da chamada de função não é totalmente determinado por seus parâmetros. Somente as funções que sempre retornam o mesmo resultado para os mesmos parâmetros - funções que são determinísticas - podem ser indexadas. 
 A razão por trás dessa limitação é simples. Ao inserir uma nova linha, o banco de dados chama a função e armazena o resultado no índice e ali permanece inalterado. Não há nenhum processo periódico que atualiza o índice. O banco de dados atualiza a idade indexada apenas quando a data de nascimento é alterada por uma instrução de atualização. Após o próximo aniversário, a idade armazenada no índice será errada. 
 Além de ser determinista, o PostgreSQL e o banco de dados Oracle exigem que as funções sejam declaradas determinísticas quando usadas em um índice, portanto você precisa usar a palavra-chave DETERMINISTIC (Oracle) ou IMMUTABLE (PostgreSQL). 
