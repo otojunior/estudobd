@@ -1,4 +1,45 @@
-﻿-- criar coluna de busca:
+﻿-- insensível a tempo verbal :: verbo comer: comeu, comeria, comerá
+-- insensível a flexão de gênero e número: rato: rata, ratos
+-- ignora artigos que não mudam o significado da sentença de pesquisa
+
+SELECT 
+	to_tsquery('comeu & rato') @@ 
+	to_tsvector('Um gato comeu muitos ratos');
+
+SELECT 
+	to_tsquery('um & comeria & rato') @@ 
+	to_tsvector('Um gato comeu muitos ratos');
+	
+SELECT 
+	to_tsquery('o & comerá & rata') @@ 
+	to_tsvector('Um gato comeu muitos ratos');
+
+-- ratazana já muda o significado.
+
+SELECT 
+	to_tsquery('comerá & ratazana') @@ 
+	to_tsvector('Um gato comeu muitos ratos');
+
+-- termos um seguido do outro:
+
+SELECT to_tsquery('fatal <1> error') @@ to_tsvector('fatal error');
+SELECT to_tsquery('gato <2> rato') @@ to_tsvector('gatos comem ratos');
+
+
+-- pesquisas com negação:
+
+SELECT 
+	to_tsquery('o & comerá & rata & !cachorro') @@ 
+	to_tsvector('Um gato comeria muitos ratos, mas o cachorro não deixou');
+
+SELECT 
+	to_tsquery('o & comerá & rata & !cachorro') @@ 
+	to_tsvector('Um gato comeria muitos ratos, mas o coelho não deixou');
+
+
+-- **********************************************************
+
+-- criar coluna de busca:
 
 ALTER TABLE municipios ADD busca tsvector;
 
@@ -57,3 +98,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER municipios_tsupdate
 BEFORE INSERT OR UPDATE ON municipios
 FOR EACH ROW EXECUTE PROCEDURE municipios_trigger();
+
+
+--Link: https://www.infoq.com/br/articles/postgresql-fts
